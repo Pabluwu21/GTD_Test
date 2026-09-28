@@ -1,47 +1,33 @@
-import os
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 
 # Configuración de la página
 st.set_page_config(
     page_title="Control de Terreno - Habilitaciones y Servicios", layout="wide"
 )
 
-# Archivo de almacenamiento permanente
-ARCHIVO_DATOS = "registros_terreno.csv"
-
-# Columnas del sistema
-COLUMNAS = [
-    "Fecha_Registro",
-    "Tecnico",
-    "Orden_Trabajo",
-    "Codigo_Servicio",
-    "Tipo_Trabajo",
-    "Acceso_Switch",
-    "Puerta_Switch",
-    "IDS",
-    "Operador_Red",
-    "Estado_Trabajo",
-    "Categoria_Fallo",
-    "Detalle_Fallo",
-    "Estado_Equipamiento",
-]
+# Conexión con Google Sheets
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 
-# Función para cargar datos permanentes
+# Función para cargar datos desde Google Sheets
 def cargar_datos():
-    if os.path.exists(ARCHIVO_DATOS):
-        return pd.read_csv(ARCHIVO_DATOS)
-    return pd.DataFrame(columns=COLUMNAS)
+    try:
+        # Lee la primera pestaña de la hoja de cálculo
+        df = conn.read(worksheet="Hoja 1", ttl=0)
+        return df.dropna(how="all")
+    except Exception:
+        return pd.DataFrame()
 
 
-# Función para guardar un nuevo registro
+# Función para guardar un nuevo registro en Google Sheets
 def guardar_registro(nuevo_dict):
     df_actual = cargar_datos()
     df_nuevo = pd.DataFrame([nuevo_dict])
     df_final = pd.concat([df_actual, df_nuevo], ignore_index=True)
-    df_final.to_csv(ARCHIVO_DATOS, index=False)
+    conn.update(worksheet="Hoja 1", data=df_final)
 
 
 st.title("📡 Sistema de Control y Retroalimentación de Terreno")
@@ -89,7 +75,6 @@ if menu == "Registrar Trabajo":
             key="estado_trabajo_select",
         )
 
-    # Campos condicionales para Switch de Acceso (Solo en Habilitación de servicio)
     acceso_switch = "N/A"
     puerta_switch = "N/A"
 
@@ -107,7 +92,6 @@ if menu == "Registrar Trabajo":
                 placeholder="Ej: Gi0/1/2",
             )
 
-    # Variables de falla / equipamiento
     categoria_fallo = "N/A"
     detalle_fallo = "N/A"
     estado_equipamiento = "N/A"
@@ -163,9 +147,10 @@ if menu == "Registrar Trabajo":
                 "Detalle_Fallo": detalle_fallo,
                 "Estado_Equipamiento": estado_equipamiento,
             }
-            guardar_registro(registro)
+            with st.spinner("Guardando registro en Google Sheets..."):
+                guardar_registro(registro)
             st.success(
-                f"¡Registro para la Orden {orden} guardado exitosamente!"
+                f"¡Registro para la Orden {orden} guardado permanentemente!"
             )
         else:
             st.error(
@@ -180,10 +165,9 @@ elif menu == "Panel de Control y Gráficos":
 
     df = cargar_datos()
 
-    if df.empty:
-        st.info("Aún no hay registros guardados. Ingrese datos en el formulario.")
+    if df.empty or len(df) == 0:
+        st.info("Aún no hay registros guardados en Google Sheets.")
     else:
-        # Métricas principales
         total = len(df)
         exitosos = len(df[df["Estado_Trabajo"] == "Sí"])
         fallidos = len(df[df["Estado_Trabajo"] == "No"])
@@ -195,7 +179,6 @@ elif menu == "Panel de Control y Gráficos":
 
         st.divider()
 
-        # Sección de Gráficos Circulares (Pie Charts)
         st.subheader("📈 Distribución Visual de Resultados")
         g_col1, g_col2 = st.columns(2)
 
@@ -227,11 +210,9 @@ elif menu == "Panel de Control y Gráficos":
 
         st.divider()
 
-        # Tabla limpia de datos
-        st.subheader("📋 Consolidado de Trabajos (Excel Ordenado)")
+        st.subheader("📋 Consolidado de Trabajos (Google Sheets en Vivo)")
         st.dataframe(df, use_container_width=True)
 
-        # Botón de descarga
         csv_data = df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="📥 Descargar Reporte Consolidado (Excel/CSV)",
@@ -242,30 +223,31 @@ elif menu == "Panel de Control y Gráficos":
 
         st.divider()
 
-        # Retroalimentación por IDS
         st.subheader("🔎 Retroalimentación por IDS (Jefe de Implementación)")
-        ids_seleccionado = st.selectbox(
-            "Seleccione un IDS para revisar fallos asociados:",
-            df["IDS"].unique(),
-        )
-
-        df_ids = df[df["IDS"] == ids_seleccionado]
-        fallos_ids = df_ids[df_ids["Estado_Trabajo"] == "No"]
-
-        st.write(
-            f"**Resumen para {ids_seleccionado}:** Total asignados: {len(df_ids)} | Trabajos con problema: {len(fallos_ids)}"
-        )
-
-        if not fallos_ids.empty:
-            for idx, row in fallos_ids.iterrows():
-                st.markdown(
-                    f"- **Orden {row['Orden_Trabajo']}** (Técnico: {row['Tecnico']} | Operador: {row['Operador_Red']}): "
-                    f"*{row['Categoria_Fallo']}* — **Origen:** {row['Detalle_Fallo']}"
-                )
-        else:
-            st.success(
-                f"El IDS {ids_seleccionado} no presenta trabajos fallidos."
+        ids_unicos = df["IDS"].dropna().unique()
+        if len(ids_unicos) > 0:
+            ids_seleccionado = st.selectbox(
+                "Seleccione un IDS para revisar fallos asociados:",
+                ids_unicos,
             )
+
+            df_ids = df[df["IDS"] == ids_seleccionado]
+            fallos_ids = df_ids[df_ids["Estado_Trabajo"] == "No"]
+
+            st.write(
+                f"**Resumen para {ids_seleccionado}:** Total asignados: {len(df_ids)} | Trabajos con problema: {len(fallos_ids)}"
+            )
+
+            if not fallos_ids.empty:
+                for idx, row in fallos_ids.iterrows():
+                    st.markdown(
+                        f"- **Orden {row['Orden_Trabajo']}** (Técnico: {row['Tecnico']} | Operador: {row['Operador_Red']}): "
+                        f"*{row['Categoria_Fallo']}* — **Origen:** {row['Detalle_Fallo']}"
+                    )
+            else:
+                st.success(
+                    f"El IDS {ids_seleccionado} no presenta trabajos fallidos."
+                )
 
 # ---------------------------------------------------------
 # PESTAÑA 3: PERFIL DEL TÉCNICO
@@ -275,75 +257,73 @@ elif menu == "Perfil del Técnico":
 
     df = cargar_datos()
 
-    if df.empty:
+    if df.empty or len(df) == 0:
         st.info("Aún no hay datos para mostrar perfiles de técnicos.")
     else:
         tecnicos_unicos = df["Tecnico"].dropna().unique()
-        tecnico_sel = st.selectbox("Seleccione un Técnico:", tecnicos_unicos)
+        if len(tecnicos_unicos) > 0:
+            tecnico_sel = st.selectbox("Seleccione un Técnico:", tecnicos_unicos)
 
-        df_tec = df[df["Tecnico"] == tecnico_sel]
+            df_tec = df[df["Tecnico"] == tecnico_sel]
 
-        st.markdown("---")
-        
-        # Tarjeta de presentación superior
-        card_col1, card_col2 = st.columns([1, 3])
+            st.markdown("---")
 
-        with card_col1:
-            st.image(
-                "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
-                width=130,
+            card_col1, card_col2 = st.columns([1, 3])
+
+            with card_col1:
+                st.image(
+                    "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
+                    width=130,
+                )
+                st.subheader(f"{tecnico_sel}")
+                st.caption("Técnico de Terreno / Cuadrilla")
+
+                tot_tec = len(df_tec)
+                exi_tec = len(df_tec[df_tec["Estado_Trabajo"] == "Sí"])
+                fal_tec = tot_tec - exi_tec
+
+                st.markdown(f"**Total Trabajos:** {tot_tec}")
+                st.markdown(f"✅ **Exitosos:** {exi_tec}")
+                st.markdown(f"❌ **Fallidos:** {fal_tec}")
+
+            with card_col2:
+                st.subheader("📊 Análisis de Desempeño (Gráficos Circulares)")
+                pie_col1, pie_col2 = st.columns(2)
+
+                with pie_col1:
+                    fig_tec_estado = px.pie(
+                        df_tec,
+                        names="Estado_Trabajo",
+                        title="Proporción Éxito vs. Fallos",
+                        color="Estado_Trabajo",
+                        color_discrete_map={"Sí": "#2ecc71", "No": "#e74c3c"},
+                        hole=0.4,
+                    )
+                    st.plotly_chart(fig_tec_estado, use_container_width=True)
+
+                with pie_col2:
+                    fig_tec_tipos = px.pie(
+                        df_tec,
+                        names="Tipo_Trabajo",
+                        title="Tipos de Trabajos Asignados",
+                        hole=0.4,
+                    )
+                    st.plotly_chart(fig_tec_tipos, use_container_width=True)
+
+            st.divider()
+
+            st.subheader("📋 Historial de Trabajos de este Técnico")
+            st.dataframe(
+                df_tec[
+                    [
+                        "Fecha_Registro",
+                        "Orden_Trabajo",
+                        "Tipo_Trabajo",
+                        "Estado_Trabajo",
+                        "Categoria_Fallo",
+                        "Detalle_Fallo",
+                        "Estado_Equipamiento",
+                    ]
+                ],
+                use_container_width=True,
             )
-            st.subheader(f"{tecnico_sel}")
-            st.caption("Técnico de Terreno / Cuadrilla")
-
-            tot_tec = len(df_tec)
-            exi_tec = len(df_tec[df_tec["Estado_Trabajo"] == "Sí"])
-            fal_tec = tot_tec - exi_tec
-
-            st.markdown(f"**Total Trabajos:** {tot_tec}")
-            st.markdown(f"✅ **Exitosos:** {exi_tec}")
-            st.markdown(f"❌ **Fallidos:** {fal_tec}")
-
-        with card_col2:
-            st.subheader("📊 Análisis de Desempeño (Gráficos Circulares)")
-            pie_col1, pie_col2 = st.columns(2)
-
-            with pie_col1:
-                # Gráfico 1: Éxito vs Fallo del Técnico
-                fig_tec_estado = px.pie(
-                    df_tec,
-                    names="Estado_Trabajo",
-                    title="Proporción Éxito vs. Fallos",
-                    color="Estado_Trabajo",
-                    color_discrete_map={"Sí": "#2ecc71", "No": "#e74c3c"},
-                    hole=0.4,
-                )
-                st.plotly_chart(fig_tec_estado, use_container_width=True)
-
-            with pie_col2:
-                # Gráfico 2: Distribución por Tipo de Trabajo (Habilitación, Levantamiento, NRA)
-                fig_tec_tipos = px.pie(
-                    df_tec,
-                    names="Tipo_Trabajo",
-                    title="Tipos de Trabajos Asignados",
-                    hole=0.4,
-                )
-                st.plotly_chart(fig_tec_tipos, use_container_width=True)
-
-        st.divider()
-
-        st.subheader("📋 Historial de Trabajos de este Técnico")
-        st.dataframe(
-            df_tec[
-                [
-                    "Fecha_Registro",
-                    "Orden_Trabajo",
-                    "Tipo_Trabajo",
-                    "Estado_Trabajo",
-                    "Categoria_Fallo",
-                    "Detalle_Fallo",
-                    "Estado_Equipamiento",
-                ]
-            ],
-            use_container_width=True,
-        )
