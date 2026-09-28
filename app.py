@@ -7,6 +7,9 @@ st.set_page_config(
     page_title="Control de Terreno - Habilitaciones y Servicios", layout="wide"
 )
 
+# Definir la contraseña de Administrador
+CLAVE_ADMIN = "Pablito"  # Puedes cambiar esta clave por la que prefieras
+
 # Columnas del sistema
 COLUMNAS = [
     "Fecha_Registro",
@@ -24,17 +27,15 @@ COLUMNAS = [
     "Estado_Equipamiento",
 ]
 
-# Inicialización de la base de datos en la memoria de la sesión
+# Inicialización de la base de datos en memoria
 if "df_datos" not in st.session_state:
     st.session_state.df_datos = pd.DataFrame(columns=COLUMNAS)
 
 
-# Función para cargar datos
 def cargar_datos():
     return st.session_state.df_datos
 
 
-# Función para guardar un nuevo registro
 def guardar_registro(nuevo_dict):
     df_actual = st.session_state.df_datos
     df_nuevo = pd.DataFrame([nuevo_dict])
@@ -46,17 +47,42 @@ def guardar_registro(nuevo_dict):
 st.title("📡 Sistema de Control y Retroalimentación de Terreno")
 st.markdown("Plataforma de gestión de trabajos, resguardo y causas de fallos.")
 
-menu = st.sidebar.selectbox(
-    "Menú Principal",
-    [
+# ---------------------------------------------------------
+# BARRA LATERAL: CONTROL DE ACCESO
+# ---------------------------------------------------------
+st.sidebar.title("🔐 Control de Acceso")
+
+# Autenticación de Administrador
+es_admin = False
+clave_ingresada = st.sidebar.text_input(
+    "Clave de Administrador", type="password", placeholder="Ingrese clave..."
+)
+
+if clave_ingresada == CLAVE_ADMIN:
+    es_admin = True
+    st.sidebar.success("🔓 Acceso de Administrador Activo")
+elif clave_ingresada != "":
+    st.sidebar.error("❌ Clave incorrecta")
+
+st.sidebar.divider()
+
+# Definir opciones del menú según el rol
+if es_admin:
+    opciones_menu = [
         "Registrar Trabajo",
         "Panel de Control y Gráficos",
         "Perfil del Técnico",
-    ],
-)
+    ]
+else:
+    opciones_menu = ["Registrar Trabajo"]
+    st.sidebar.info(
+        "ℹ️ Modo Usuario: Sólo acceso habilitado para el registro de trabajos."
+    )
+
+menu = st.sidebar.radio("Navegación", opciones_menu)
 
 # ---------------------------------------------------------
-# PESTAÑA 1: REGISTRAR TRABAJO
+# PESTAÑA 1: REGISTRAR TRABAJO (Disponible para todos)
 # ---------------------------------------------------------
 if menu == "Registrar Trabajo":
     st.header("📝 Formulario de Trabajo en Terreno")
@@ -88,7 +114,6 @@ if menu == "Registrar Trabajo":
             key="estado_trabajo_select",
         )
 
-    # Campos condicionales para Switch de Acceso (Solo en Habilitación de servicio)
     acceso_switch = "N/A"
     puerta_switch = "N/A"
 
@@ -106,7 +131,6 @@ if menu == "Registrar Trabajo":
                 placeholder="Ej: Gi0/1/2",
             )
 
-    # Variables de falla / equipamiento
     categoria_fallo = "N/A"
     detalle_fallo = "N/A"
     estado_equipamiento = "N/A"
@@ -173,9 +197,9 @@ if menu == "Registrar Trabajo":
             )
 
 # ---------------------------------------------------------
-# PESTAÑA 2: PANEL DE CONTROL Y GRÁFICOS
+# PESTAÑA 2: PANEL DE CONTROL Y GRÁFICOS (Sólo Admin)
 # ---------------------------------------------------------
-elif menu == "Panel de Control y Gráficos":
+elif menu == "Panel de Control y Gráficos" and es_admin:
     st.header("📊 Panel General, Gráficos y Retroalimentación")
 
     df = cargar_datos()
@@ -183,7 +207,6 @@ elif menu == "Panel de Control y Gráficos":
     if df.empty:
         st.info("Aún no hay registros guardados. Ingrese datos en el formulario.")
     else:
-        # Métricas principales
         total = len(df)
         exitosos = len(df[df["Estado_Trabajo"] == "Sí"])
         fallidos = len(df[df["Estado_Trabajo"] == "No"])
@@ -195,7 +218,6 @@ elif menu == "Panel de Control y Gráficos":
 
         st.divider()
 
-        # Sección de Gráficos Circulares
         st.subheader("📈 Distribución Visual de Resultados")
         g_col1, g_col2 = st.columns(2)
 
@@ -227,11 +249,9 @@ elif menu == "Panel de Control y Gráficos":
 
         st.divider()
 
-        # Tabla consolidada de datos
         st.subheader("📋 Consolidado de Trabajos (Tabla Interactiva)")
         st.dataframe(df, use_container_width=True)
 
-        # Botón de descarga
         csv_data = df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="📥 Descargar Reporte Consolidado (Excel/CSV)",
@@ -242,7 +262,6 @@ elif menu == "Panel de Control y Gráficos":
 
         st.divider()
 
-        # Retroalimentación por IDS
         st.subheader("🔎 Retroalimentación por IDS (Jefe de Implementación)")
         ids_unicos = df["IDS"].dropna().unique()
         if len(ids_unicos) > 0:
@@ -270,9 +289,9 @@ elif menu == "Panel de Control y Gráficos":
                 )
 
 # ---------------------------------------------------------
-# PESTAÑA 3: PERFIL DEL TÉCNICO
+# PESTAÑA 3: PERFIL DEL TÉCNICO (Sólo Admin)
 # ---------------------------------------------------------
-elif menu == "Perfil del Técnico":
+elif menu == "Perfil del Técnico" and es_admin:
     st.header("👤 Perfil Individual del Técnico y Desempeño")
 
     df = cargar_datos()
