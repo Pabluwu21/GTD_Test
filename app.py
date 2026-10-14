@@ -15,6 +15,13 @@ st.set_page_config(
 # Archivo de almacenamiento local para pruebas
 ARCHIVO_DATOS = "registros_terreno.csv"
 
+# Diccionario Global de Prioridad para Agrupación de Trabajos
+ORDEN_TIPOS = {
+    "Habilitación de servicio": 1,
+    "NRA": 2,
+    "Levantamiento en terreno": 3,
+}
+
 # Columnas del sistema
 COLUMNAS = [
     "Fecha_Registro",
@@ -43,16 +50,9 @@ def convertir_a_excel_formateado(df):
     output = io.BytesIO()
 
     # 1. ORDENAR DATOS POR TIPO Y SUBTIPO DE TRABAJO
-    # Definir un orden personalizado para los tipos de trabajo principales
-    orden_tipos = {
-        "Habilitación de servicio": 1,
-        "NRA": 2,
-        "Levantamiento en terreno": 3,
-    }
-
     df_agrupado = df.copy()
     df_agrupado["Prioridad_Grupo"] = df_agrupado["Tipo_Trabajo"].map(
-        lambda x: orden_tipos.get(x, 99)
+        lambda x: ORDEN_TIPOS.get(x, 99)
     )
 
     # Ordenar por Prioridad del Grupo, luego Subtipo NRA y Fecha
@@ -424,15 +424,10 @@ elif menu == "Panel de Control y Gráficos":
 
         st.subheader("📋 Consolidado de Trabajos (Tabla Interactiva)")
 
-        # Ordenar también la vista previa de la tabla interactiva por grupo
-        orden_tipos = {
-            "Habilitación de servicio": 1,
-            "NRA": 2,
-            "Levantamiento en terreno": 3,
-        }
+        # Ordenar vista previa interactiva por grupo usando el diccionario global
         df_display = df.copy()
         df_display["Prioridad"] = df_display["Tipo_Trabajo"].map(
-            lambda x: orden_tipos.get(x, 99)
+            lambda x: ORDEN_TIPOS.get(x, 99)
         )
         df_display = df_display.sort_values(
             by=["Prioridad", "Subtipo_NRA", "Fecha_Registro"]
@@ -514,9 +509,10 @@ elif menu == "Perfil del Técnico":
 
             st.subheader("📋 Historial de Trabajos de este Técnico")
 
+            # Ordenar usando el diccionario global ORDEN_TIPOS
             df_tec_display = df_tec.copy()
             df_tec_display["Prioridad"] = df_tec_display["Tipo_Trabajo"].map(
-                lambda x: orden_tipos.get(x, 99)
+                lambda x: ORDEN_TIPOS.get(x, 99)
             )
             df_tec_display = df_tec_display.sort_values(
                 by=["Prioridad", "Subtipo_NRA", "Fecha_Registro"]
