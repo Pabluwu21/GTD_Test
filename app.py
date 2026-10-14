@@ -414,3 +414,112 @@ elif menu == "Panel de Control y Gráficos":
             st.markdown("**Distribución por Tipo de Trabajo**")
             fig_pie_tipos = px.pie(
                 df,
+                names="Tipo_Trabajo",
+                title="Tipos de Actividades Solicitadas",
+                hole=0.3,
+            )
+            st.plotly_chart(fig_pie_tipos, use_container_width=True)
+
+        st.divider()
+
+        st.subheader("📋 Consolidado de Trabajos (Tabla Interactiva)")
+
+        # Ordenar también la vista previa de la tabla interactiva por grupo
+        orden_tipos = {
+            "Habilitación de servicio": 1,
+            "NRA": 2,
+            "Levantamiento en terreno": 3,
+        }
+        df_display = df.copy()
+        df_display["Prioridad"] = df_display["Tipo_Trabajo"].map(
+            lambda x: orden_tipos.get(x, 99)
+        )
+        df_display = df_display.sort_values(
+            by=["Prioridad", "Subtipo_NRA", "Fecha_Registro"]
+        ).drop(columns=["Prioridad"])
+
+        st.dataframe(df_display, use_container_width=True)
+
+        # Generar descarga nativa a Excel (.xlsx) con filas agrupadas por tipo
+        excel_data = convertir_a_excel_formateado(df)
+        st.download_button(
+            label="📊 Descargar Planilla Excel Agrupada (.xlsx)",
+            data=excel_data,
+            file_name="reporte_trabajos_agrupados.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+# ---------------------------------------------------------
+# PESTAÑA 3: PERFIL DEL TÉCNICO
+# ---------------------------------------------------------
+elif menu == "Perfil del Técnico":
+    st.header("👤 Perfil Individual del Técnico y Desempeño")
+
+    df = cargar_datos()
+
+    if df.empty:
+        st.info("Aún no hay datos para mostrar perfiles de técnicos.")
+    else:
+        tecnicos_unicos = df["Tecnico"].dropna().unique()
+        if len(tecnicos_unicos) > 0:
+            tecnico_sel = st.selectbox("Seleccione un Técnico:", tecnicos_unicos)
+
+            df_tec = df[df["Tecnico"] == tecnico_sel]
+
+            st.markdown("---")
+
+            card_col1, card_col2 = st.columns([1, 3])
+
+            with card_col1:
+                st.image(
+                    "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
+                    width=130,
+                )
+                st.subheader(f"{tecnico_sel}")
+                st.caption("Técnico de Terreno / Cuadrilla")
+
+                tot_tec = len(df_tec)
+                exi_tec = len(df_tec[df_tec["Estado_Trabajo"] == "Sí"])
+                fal_tec = tot_tec - exi_tec
+
+                st.markdown(f"**Total Trabajos:** {tot_tec}")
+                st.markdown(f"✅ **Exitosos:** {exi_tec}")
+                st.markdown(f"❌ **Fallidos:** {fal_tec}")
+
+            with card_col2:
+                st.subheader("📊 Análisis de Desempeño (Gráficos Circulares)")
+                pie_col1, pie_col2 = st.columns(2)
+
+                with pie_col1:
+                    fig_tec_estado = px.pie(
+                        df_tec,
+                        names="Estado_Trabajo",
+                        title="Proporción Éxito vs. Fallos",
+                        color="Estado_Trabajo",
+                        color_discrete_map={"Sí": "#2ecc71", "No": "#e74c3c"},
+                        hole=0.4,
+                    )
+                    st.plotly_chart(fig_tec_estado, use_container_width=True)
+
+                with pie_col2:
+                    fig_tec_tipos = px.pie(
+                        df_tec,
+                        names="Tipo_Trabajo",
+                        title="Tipos de Trabajos Asignados",
+                        hole=0.4,
+                    )
+                    st.plotly_chart(fig_tec_tipos, use_container_width=True)
+
+            st.divider()
+
+            st.subheader("📋 Historial de Trabajos de este Técnico")
+
+            df_tec_display = df_tec.copy()
+            df_tec_display["Prioridad"] = df_tec_display["Tipo_Trabajo"].map(
+                lambda x: orden_tipos.get(x, 99)
+            )
+            df_tec_display = df_tec_display.sort_values(
+                by=["Prioridad", "Subtipo_NRA", "Fecha_Registro"]
+            ).drop(columns=["Prioridad"])
+
+            st.dataframe(df_tec_display, use_container_width=True)
