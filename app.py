@@ -38,25 +38,51 @@ COLUMNAS = [
 ]
 
 
-# Función para generar y dar formato estético profesional al Excel
+# Función para generar y dar formato estético agrupado al Excel
 def convertir_a_excel_formateado(df):
     output = io.BytesIO()
 
-    # Crear el archivo con openpyxl
+    # 1. ORDENAR DATOS POR TIPO Y SUBTIPO DE TRABAJO
+    # Definir un orden personalizado para los tipos de trabajo principales
+    orden_tipos = {
+        "Habilitación de servicio": 1,
+        "NRA": 2,
+        "Levantamiento en terreno": 3,
+    }
+
+    df_agrupado = df.copy()
+    df_agrupado["Prioridad_Grupo"] = df_agrupado["Tipo_Trabajo"].map(
+        lambda x: orden_tipos.get(x, 99)
+    )
+
+    # Ordenar por Prioridad del Grupo, luego Subtipo NRA y Fecha
+    df_agrupado = df_agrupado.sort_values(
+        by=["Prioridad_Grupo", "Subtipo_NRA", "Fecha_Registro"],
+        ascending=[True, True, True],
+    ).drop(columns=["Prioridad_Grupo"])
+
+    # 2. CREAR LIBRO Y ESTILOS OPENPYXL
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Registros_Terreno"
+    ws.title = "Registros_Agrupados"
 
-    # Estilos
+    # Estilos de encabezado principal
     header_fill = PatternFill(
         start_color="1F4E78", end_color="1F4E78", fill_type="solid"
     )  # Azul Corporativo
     header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
 
-    row_fill_even = PatternFill(
-        start_color="F2F5F8", end_color="F2F5F8", fill_type="solid"
-    )  # Gris/Azul tenue para filas pares
-    row_fill_odd = PatternFill(
+    # Colores sutiles para destacar grupos de trabajo
+    fill_hab = PatternFill(
+        start_color="E8F1F5", end_color="E8F1F5", fill_type="solid"
+    )  # Azul tenue para Habilitación
+    fill_nra = PatternFill(
+        start_color="FEF5E7", end_color="FEF5E7", fill_type="solid"
+    )  # Naranja/Crema tenue para NRA
+    fill_lev = PatternFill(
+        start_color="EAFAF1", end_color="EAFAF1", fill_type="solid"
+    )  # Verde tenue para Levantamiento
+    fill_default = PatternFill(
         start_color="FFFFFF", end_color="FFFFFF", fill_type="solid"
     )
 
@@ -71,7 +97,7 @@ def convertir_a_excel_formateado(df):
     align_left = Alignment(horizontal="left", vertical="center")
 
     # Escribir encabezados
-    encabezados = list(df.columns)
+    encabezados = list(df_agrupado.columns)
     ws.append(encabezados)
 
     for col_num, col_name in enumerate(encabezados, 1):
@@ -83,15 +109,25 @@ def convertir_a_excel_formateado(df):
 
     ws.row_dimensions[1].height = 28  # Altura del encabezado
 
-    # Escribir filas de datos con formato
-    for row_idx, row_data in enumerate(df.values, start=2):
+    # Escribir filas de datos agrupadas con sombreado categórico
+    for row_idx, row_data in enumerate(df_agrupado.values, start=2):
         ws.append(list(row_data))
-        fill_actual = row_fill_even if row_idx % 2 == 0 else row_fill_odd
-        ws.row_dimensions[row_idx].height = 20  # Altura de filas de datos
+        ws.row_dimensions[row_idx].height = 20  # Altura de filas
+
+        # Identificar tipo de trabajo para asignar color de grupo
+        tipo_actual = row_data[4]  # Columna 'Tipo_Trabajo'
+        if tipo_actual == "Habilitación de servicio":
+            row_fill = fill_hab
+        elif tipo_actual == "NRA":
+            row_fill = fill_nra
+        elif tipo_actual == "Levantamiento en terreno":
+            row_fill = fill_lev
+        else:
+            row_fill = fill_default
 
         for col_idx, value in enumerate(row_data, start=1):
             cell = ws.cell(row=row_idx, column=col_idx)
-            cell.fill = fill_actual
+            cell.fill = row_fill
             cell.border = thin_border
             cell.font = Font(name="Calibri", size=10)
 
@@ -233,7 +269,9 @@ if menu == "Registrar Trabajo":
         )
 
         if subtipo_nra == "Cambio de tecnología / Aumento de velocidad":
-            st.warning("👥 Esta actividad requiere 2 personas e información de migración:")
+            st.warning(
+                "👥 Esta actividad requiere 2 personas e información de migración:"
+            )
             col_tec, col_acc, col_imc = st.columns(3)
             with col_tec:
                 tecnico_apoyo = st.text_input(
@@ -321,7 +359,9 @@ if menu == "Registrar Trabajo":
                 "Categoria_Fallo": categoria_fallo,
                 "Detalle_Fallo": detalle_fallo,
                 "Estado_Equipamiento": estado_equipamiento,
-                "Observaciones": observaciones if observaciones else "Sin observaciones",
+                "Observaciones": observaciones
+                if observaciones
+                else "Sin observaciones",
             }
             guardar_registro(registro)
             st.success(
@@ -374,88 +414,3 @@ elif menu == "Panel de Control y Gráficos":
             st.markdown("**Distribución por Tipo de Trabajo**")
             fig_pie_tipos = px.pie(
                 df,
-                names="Tipo_Trabajo",
-                title="Tipos de Actividades Solicitadas",
-                hole=0.3,
-            )
-            st.plotly_chart(fig_pie_tipos, use_container_width=True)
-
-        st.divider()
-
-        st.subheader("📋 Consolidado de Trabajos (Tabla Interactiva)")
-        st.dataframe(df, use_container_width=True)
-
-        # Generar descarga nativa a Excel (.xlsx) con estilo profesional
-        excel_data = convertir_a_excel_formateado(df)
-        st.download_button(
-            label="📊 Descargar Planilla Excel Formateada (.xlsx)",
-            data=excel_data,
-            file_name="reporte_trabajos_terreno.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-
-# ---------------------------------------------------------
-# PESTAÑA 3: PERFIL DEL TÉCNICO
-# ---------------------------------------------------------
-elif menu == "Perfil del Técnico":
-    st.header("👤 Perfil Individual del Técnico y Desempeño")
-
-    df = cargar_datos()
-
-    if df.empty:
-        st.info("Aún no hay datos para mostrar perfiles de técnicos.")
-    else:
-        tecnicos_unicos = df["Tecnico"].dropna().unique()
-        if len(tecnicos_unicos) > 0:
-            tecnico_sel = st.selectbox("Seleccione un Técnico:", tecnicos_unicos)
-
-            df_tec = df[df["Tecnico"] == tecnico_sel]
-
-            st.markdown("---")
-
-            card_col1, card_col2 = st.columns([1, 3])
-
-            with card_col1:
-                st.image(
-                    "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
-                    width=130,
-                )
-                st.subheader(f"{tecnico_sel}")
-                st.caption("Técnico de Terreno / Cuadrilla")
-
-                tot_tec = len(df_tec)
-                exi_tec = len(df_tec[df_tec["Estado_Trabajo"] == "Sí"])
-                fal_tec = tot_tec - exi_tec
-
-                st.markdown(f"**Total Trabajos:** {tot_tec}")
-                st.markdown(f"✅ **Exitosos:** {exi_tec}")
-                st.markdown(f"❌ **Fallidos:** {fal_tec}")
-
-            with card_col2:
-                st.subheader("📊 Análisis de Desempeño (Gráficos Circulares)")
-                pie_col1, pie_col2 = st.columns(2)
-
-                with pie_col1:
-                    fig_tec_estado = px.pie(
-                        df_tec,
-                        names="Estado_Trabajo",
-                        title="Proporción Éxito vs. Fallos",
-                        color="Estado_Trabajo",
-                        color_discrete_map={"Sí": "#2ecc71", "No": "#e74c3c"},
-                        hole=0.4,
-                    )
-                    st.plotly_chart(fig_tec_estado, use_container_width=True)
-
-                with pie_col2:
-                    fig_tec_tipos = px.pie(
-                        df_tec,
-                        names="Tipo_Trabajo",
-                        title="Tipos de Trabajos Asignados",
-                        hole=0.4,
-                    )
-                    st.plotly_chart(fig_tec_tipos, use_container_width=True)
-
-            st.divider()
-
-            st.subheader("📋 Historial de Trabajos de este Técnico")
-            st.dataframe(df_tec, use_container_width=True)
