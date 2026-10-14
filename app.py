@@ -14,7 +14,7 @@ CLAVE_ADMIN = "admin123"
 # Archivo de almacenamiento local para pruebas
 ARCHIVO_DATOS = "registros_terreno.csv"
 
-# Columnas del sistema actualizadas con los nuevos campos
+# Columnas del sistema actualizadas
 COLUMNAS = [
     "Fecha_Registro",
     "Tecnico",
@@ -166,9 +166,8 @@ if menu == "Registrar Trabajo":
             ],
         )
 
-        # Sub-condicional 1: Cambio de tecnología / Aumento de velocidad
         if subtipo_nra == "Cambio de tecnología / Aumento de velocidad":
-            st.warning("👥 Esta actividad requiere 2 personas e información de migración de red:")
+            st.warning("👥 Esta actividad requiere 2 personas e información de migración:")
             col_tec, col_acc, col_imc = st.columns(3)
             with col_tec:
                 tecnico_apoyo = st.text_input(
@@ -186,7 +185,6 @@ if menu == "Registrar Trabajo":
                     placeholder="Ej: IMC-998877",
                 )
 
-        # Sub-condicional 2: Habilitación NRA -> Switch de Acceso de Mall
         elif subtipo_nra == "Habilitación NRA":
             acceso_switch = st.text_input(
                 "Switch de Acceso de Mall",
@@ -229,11 +227,10 @@ if menu == "Registrar Trabajo":
             ],
         )
 
-    # Campo final común para todas las actividades
     st.markdown("---")
     observaciones = st.text_area(
         "📝 Observaciones Generales (Opcional)",
-        placeholder="Comentarios adicionales sobre la visita, contacto en sitio, detalles técnicos, etc.",
+        placeholder="Comentarios adicionales sobre la visita, detalles técnicos, etc.",
     )
 
     st.markdown("---")
@@ -353,4 +350,45 @@ elif menu == "Perfil del Técnico" and es_admin:
 
             with card_col1:
                 st.image(
-                    "
+                    "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
+                    width=130,
+                )
+                st.subheader(f"{tecnico_sel}")
+                st.caption("Técnico de Terreno / Cuadrilla")
+
+                tot_tec = len(df_tec)
+                exi_tec = len(df_tec[df_tec["Estado_Trabajo"] == "Sí"])
+                fal_tec = tot_tec - exi_tec
+
+                st.markdown(f"**Total Trabajos:** {tot_tec}")
+                st.markdown(f"✅ **Exitosos:** {exi_tec}")
+                st.markdown(f"❌ **Fallidos:** {fal_tec}")
+
+            with card_col2:
+                st.subheader("📊 Análisis de Desempeño (Gráficos Circulares)")
+                pie_col1, pie_col2 = st.columns(2)
+
+                with pie_col1:
+                    fig_tec_estado = px.pie(
+                        df_tec,
+                        names="Estado_Trabajo",
+                        title="Proporción Éxito vs. Fallos",
+                        color="Estado_Trabajo",
+                        color_discrete_map={"Sí": "#2ecc71", "No": "#e74c3c"},
+                        hole=0.4,
+                    )
+                    st.plotly_chart(fig_tec_estado, use_container_width=True)
+
+                with pie_col2:
+                    fig_tec_tipos = px.pie(
+                        df_tec,
+                        names="Tipo_Trabajo",
+                        title="Tipos de Trabajos Asignados",
+                        hole=0.4,
+                    )
+                    st.plotly_chart(fig_tec_tipos, use_container_width=True)
+
+            st.divider()
+
+            st.subheader("📋 Historial de Trabajos de este Técnico")
+            st.dataframe(df_tec, use_container_width=True)
