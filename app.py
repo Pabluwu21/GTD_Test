@@ -23,6 +23,8 @@ COLUMNAS = [
     "Tipo_Trabajo",
     "Subtipo_NRA",
     "Tecnico_Apoyo",
+    "Acceso_Nuevo",
+    "IMC_Nuevo",
     "Acceso_Switch",
     "Puerta_Switch",
     "IDS",
@@ -31,10 +33,11 @@ COLUMNAS = [
     "Categoria_Fallo",
     "Detalle_Fallo",
     "Estado_Equipamiento",
+    "Observaciones",
 ]
 
 
-# Función para cargar datos (Soporta Session State y respaldo local)
+# Función para cargar datos
 def cargar_datos():
     if "df_datos" not in st.session_state:
         if os.path.exists(ARCHIVO_DATOS):
@@ -50,10 +53,8 @@ def guardar_registro(nuevo_dict):
     df_nuevo = pd.DataFrame([nuevo_dict])
     df_final = pd.concat([df_actual, df_nuevo], ignore_index=True)
 
-    # Actualizar estado de sesión
     st.session_state.df_datos = df_final
 
-    # Guardar en archivo local para no perder datos si estás probando en PC
     try:
         df_final.to_csv(ARCHIVO_DATOS, index=False)
     except Exception:
@@ -131,6 +132,8 @@ if menu == "Registrar Trabajo":
     # Variables condicionales por defecto
     subtipo_nra = "N/A"
     tecnico_apoyo = "N/A"
+    acceso_nuevo = "N/A"
+    imc_nuevo = "N/A"
     acceso_switch = "N/A"
     puerta_switch = "N/A"
 
@@ -163,13 +166,25 @@ if menu == "Registrar Trabajo":
             ],
         )
 
-        # Sub-condicional 1: Cambio de tecnología / Aumento de velocidad -> Técnico de Apoyo
+        # Sub-condicional 1: Cambio de tecnología / Aumento de velocidad
         if subtipo_nra == "Cambio de tecnología / Aumento de velocidad":
-            st.warning("👥 Esta actividad requiere 2 personas.")
-            tecnico_apoyo = st.text_input(
-                "Nombre del Técnico de Apoyo",
-                placeholder="Ej: Juan Pérez",
-            )
+            st.warning("👥 Esta actividad requiere 2 personas e información de migración de red:")
+            col_tec, col_acc, col_imc = st.columns(3)
+            with col_tec:
+                tecnico_apoyo = st.text_input(
+                    "Técnico de Apoyo",
+                    placeholder="Ej: Juan Pérez",
+                )
+            with col_acc:
+                acceso_nuevo = st.text_input(
+                    "Acceso Nuevo",
+                    placeholder="Ej: SW-ACC-NUEVO-01",
+                )
+            with col_imc:
+                imc_nuevo = st.text_input(
+                    "IMC Nuevo",
+                    placeholder="Ej: IMC-998877",
+                )
 
         # Sub-condicional 2: Habilitación NRA -> Switch de Acceso de Mall
         elif subtipo_nra == "Habilitación NRA":
@@ -214,6 +229,13 @@ if menu == "Registrar Trabajo":
             ],
         )
 
+    # Campo final común para todas las actividades
+    st.markdown("---")
+    observaciones = st.text_area(
+        "📝 Observaciones Generales (Opcional)",
+        placeholder="Comentarios adicionales sobre la visita, contacto en sitio, detalles técnicos, etc.",
+    )
+
     st.markdown("---")
     if st.button("Guardar Registro", type="primary"):
         if orden and tecnico:
@@ -226,6 +248,8 @@ if menu == "Registrar Trabajo":
                 "Tipo_Trabajo": tipo_trabajo,
                 "Subtipo_NRA": subtipo_nra,
                 "Tecnico_Apoyo": tecnico_apoyo,
+                "Acceso_Nuevo": acceso_nuevo,
+                "IMC_Nuevo": imc_nuevo,
                 "Acceso_Switch": acceso_switch,
                 "Puerta_Switch": puerta_switch,
                 "IDS": ids,
@@ -234,6 +258,7 @@ if menu == "Registrar Trabajo":
                 "Categoria_Fallo": categoria_fallo,
                 "Detalle_Fallo": detalle_fallo,
                 "Estado_Equipamiento": estado_equipamiento,
+                "Observaciones": observaciones if observaciones else "Sin observaciones",
             }
             guardar_registro(registro)
             st.success(
@@ -328,45 +353,4 @@ elif menu == "Perfil del Técnico" and es_admin:
 
             with card_col1:
                 st.image(
-                    "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
-                    width=130,
-                )
-                st.subheader(f"{tecnico_sel}")
-                st.caption("Técnico de Terreno / Cuadrilla")
-
-                tot_tec = len(df_tec)
-                exi_tec = len(df_tec[df_tec["Estado_Trabajo"] == "Sí"])
-                fal_tec = tot_tec - exi_tec
-
-                st.markdown(f"**Total Trabajos:** {tot_tec}")
-                st.markdown(f"✅ **Exitosos:** {exi_tec}")
-                st.markdown(f"❌ **Fallidos:** {fal_tec}")
-
-            with card_col2:
-                st.subheader("📊 Análisis de Desempeño (Gráficos Circulares)")
-                pie_col1, pie_col2 = st.columns(2)
-
-                with pie_col1:
-                    fig_tec_estado = px.pie(
-                        df_tec,
-                        names="Estado_Trabajo",
-                        title="Proporción Éxito vs. Fallos",
-                        color="Estado_Trabajo",
-                        color_discrete_map={"Sí": "#2ecc71", "No": "#e74c3c"},
-                        hole=0.4,
-                    )
-                    st.plotly_chart(fig_tec_estado, use_container_width=True)
-
-                with pie_col2:
-                    fig_tec_tipos = px.pie(
-                        df_tec,
-                        names="Tipo_Trabajo",
-                        title="Tipos de Trabajos Asignados",
-                        hole=0.4,
-                    )
-                    st.plotly_chart(fig_tec_tipos, use_container_width=True)
-
-            st.divider()
-
-            st.subheader("📋 Historial de Trabajos de este Técnico")
-            st.dataframe(df_tec, use_container_width=True)
+                    "
