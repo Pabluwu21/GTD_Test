@@ -9,9 +9,6 @@ st.set_page_config(
     page_title="Control de Terreno - Habilitaciones y Servicios", layout="wide"
 )
 
-# Definir la contraseña de Administrador
-CLAVE_ADMIN = "admin123"
-
 # Archivo de almacenamiento local para pruebas
 ARCHIVO_DATOS = "registros_terreno.csv"
 
@@ -75,36 +72,17 @@ st.title("📡 Sistema de Control y Retroalimentación de Terreno")
 st.markdown("Plataforma de gestión de trabajos, resguardo y causas de fallos.")
 
 # ---------------------------------------------------------
-# BARRA LATERAL: CONTROL DE ACCESO
+# BARRA LATERAL: NAVEGACIÓN
 # ---------------------------------------------------------
-st.sidebar.title("🔐 Control de Acceso")
+st.sidebar.title("📌 Navegación")
 
-es_admin = False
-clave_ingresada = st.sidebar.text_input(
-    "Clave de Administrador", type="password", placeholder="Ingrese clave..."
-)
+opciones_menu = [
+    "Registrar Trabajo",
+    "Panel de Control y Gráficos",
+    "Perfil del Técnico",
+]
 
-if clave_ingresada == CLAVE_ADMIN:
-    es_admin = True
-    st.sidebar.success("🔓 Acceso de Administrador Activo")
-elif clave_ingresada != "":
-    st.sidebar.error("❌ Clave incorrecta")
-
-st.sidebar.divider()
-
-if es_admin:
-    opciones_menu = [
-        "Registrar Trabajo",
-        "Panel de Control y Gráficos",
-        "Perfil del Técnico",
-    ]
-else:
-    opciones_menu = ["Registrar Trabajo"]
-    st.sidebar.info(
-        "ℹ️ Modo Usuario: Sólo acceso habilitado para el registro de trabajos."
-    )
-
-menu = st.sidebar.radio("Navegación", opciones_menu)
+menu = st.sidebar.radio("Ir a:", opciones_menu)
 
 # ---------------------------------------------------------
 # PESTAÑA 1: REGISTRAR TRABAJO
@@ -223,183 +201,4 @@ if menu == "Registrar Trabajo":
             )
         with col_f2:
             detalle_fallo = st.text_area(
-                "Origen del problema (Explicación para retroalimentación)"
-            )
-
-    elif estado_trabajo == "Sí":
-        st.success("✅ Trabajo realizado. Indique estado del equipamiento:")
-        estado_equipamiento = st.selectbox(
-            "Estado del Equipamiento",
-            [
-                "Instalado y resguardado correctamente en rack",
-                "Instalado pero quedó fuera del rack / sin resguardo",
-                "Faltó equipo o componente secundario por instalar",
-            ],
-        )
-
-    st.markdown("---")
-    observaciones = st.text_area(
-        "📝 Observaciones Generales (Opcional)",
-        placeholder="Comentarios adicionales sobre la visita, detalles técnicos, etc.",
-    )
-
-    st.markdown("---")
-    if st.button("Guardar Registro", type="primary"):
-        if orden and tecnico:
-            fecha_actual = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")
-            registro = {
-                "Fecha_Registro": fecha_actual,
-                "Tecnico": tecnico,
-                "Orden_Trabajo": orden,
-                "Codigo_Servicio": codigo_servicio,
-                "Tipo_Trabajo": tipo_trabajo,
-                "Subtipo_NRA": subtipo_nra,
-                "Tecnico_Apoyo": tecnico_apoyo,
-                "Acceso_Nuevo": acceso_nuevo,
-                "IMC_Nuevo": imc_nuevo,
-                "Acceso_Switch": acceso_switch,
-                "Puerta_Switch": puerta_switch,
-                "IDS": ids,
-                "Operador_Red": operador_red,
-                "Estado_Trabajo": estado_trabajo,
-                "Categoria_Fallo": categoria_fallo,
-                "Detalle_Fallo": detalle_fallo,
-                "Estado_Equipamiento": estado_equipamiento,
-                "Observaciones": observaciones if observaciones else "Sin observaciones",
-            }
-            guardar_registro(registro)
-            st.success(
-                f"¡Registro para la Orden {orden} guardado exitosamente!"
-            )
-            st.balloons()
-        else:
-            st.error(
-                "Por favor, complete al menos la Orden de Trabajo y el Nombre del Técnico."
-            )
-
-# ---------------------------------------------------------
-# PESTAÑA 2: PANEL DE CONTROL Y GRÁFICOS (Sólo Admin)
-# ---------------------------------------------------------
-elif menu == "Panel de Control y Gráficos" and es_admin:
-    st.header("📊 Panel General, Gráficos y Retroalimentación")
-
-    df = cargar_datos()
-
-    if df.empty:
-        st.info("Aún no hay registros guardados. Ingrese datos en el formulario.")
-    else:
-        total = len(df)
-        exitosos = len(df[df["Estado_Trabajo"] == "Sí"])
-        fallidos = len(df[df["Estado_Trabajo"] == "No"])
-
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total Trabajos Registrados", total)
-        m2.metric("Realizados con Éxito", exitosos)
-        m3.metric("No Realizados (Fallos)", fallidos)
-
-        st.divider()
-
-        st.subheader("📈 Distribución Visual de Resultados")
-        g_col1, g_col2 = st.columns(2)
-
-        with g_col1:
-            st.markdown("**Proporción Éxito vs. Fallos General**")
-            fig_pie_estado = px.pie(
-                df,
-                names="Estado_Trabajo",
-                title="Efectividad Global de Trabajos",
-                color="Estado_Trabajo",
-                color_discrete_map={"Sí": "#2ecc71", "No": "#e74c3c"},
-                hole=0.3,
-            )
-            st.plotly_chart(fig_pie_estado, use_container_width=True)
-
-        with g_col2:
-            st.markdown("**Distribución por Tipo de Trabajo**")
-            fig_pie_tipos = px.pie(
-                df,
-                names="Tipo_Trabajo",
-                title="Tipos de Actividades Solicitadas",
-                hole=0.3,
-            )
-            st.plotly_chart(fig_pie_tipos, use_container_width=True)
-
-        st.divider()
-
-        st.subheader("📋 Consolidado de Trabajos (Tabla Interactiva)")
-        st.dataframe(df, use_container_width=True)
-
-        # Generar descarga nativa a Excel (.xlsx)
-        excel_data = convertir_a_excel(df)
-        st.download_button(
-            label="📊 Descargar Reporte en Excel (.xlsx)",
-            data=excel_data,
-            file_name="reporte_trabajos_terreno.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-
-# ---------------------------------------------------------
-# PESTAÑA 3: PERFIL DEL TÉCNICO (Sólo Admin)
-# ---------------------------------------------------------
-elif menu == "Perfil del Técnico" and es_admin:
-    st.header("👤 Perfil Individual del Técnico y Desempeño")
-
-    df = cargar_datos()
-
-    if df.empty:
-        st.info("Aún no hay datos para mostrar perfiles de técnicos.")
-    else:
-        tecnicos_unicos = df["Tecnico"].dropna().unique()
-        if len(tecnicos_unicos) > 0:
-            tecnico_sel = st.selectbox("Seleccione un Técnico:", tecnicos_unicos)
-
-            df_tec = df[df["Tecnico"] == tecnico_sel]
-
-            st.markdown("---")
-
-            card_col1, card_col2 = st.columns([1, 3])
-
-            with card_col1:
-                st.image(
-                    "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
-                    width=130,
-                )
-                st.subheader(f"{tecnico_sel}")
-                st.caption("Técnico de Terreno / Cuadrilla")
-
-                tot_tec = len(df_tec)
-                exi_tec = len(df_tec[df_tec["Estado_Trabajo"] == "Sí"])
-                fal_tec = tot_tec - exi_tec
-
-                st.markdown(f"**Total Trabajos:** {tot_tec}")
-                st.markdown(f"✅ **Exitosos:** {exi_tec}")
-                st.markdown(f"❌ **Fallidos:** {fal_tec}")
-
-            with card_col2:
-                st.subheader("📊 Análisis de Desempeño (Gráficos Circulares)")
-                pie_col1, pie_col2 = st.columns(2)
-
-                with pie_col1:
-                    fig_tec_estado = px.pie(
-                        df_tec,
-                        names="Estado_Trabajo",
-                        title="Proporción Éxito vs. Fallos",
-                        color="Estado_Trabajo",
-                        color_discrete_map={"Sí": "#2ecc71", "No": "#e74c3c"},
-                        hole=0.4,
-                    )
-                    st.plotly_chart(fig_tec_estado, use_container_width=True)
-
-                with pie_col2:
-                    fig_tec_tipos = px.pie(
-                        df_tec,
-                        names="Tipo_Trabajo",
-                        title="Tipos de Trabajos Asignados",
-                        hole=0.4,
-                    )
-                    st.plotly_chart(fig_tec_tipos, use_container_width=True)
-
-            st.divider()
-
-            st.subheader("📋 Historial de Trabajos de este Técnico")
-            st.dataframe(df_tec, use_container_width=True)
+                "Origen del problema (Explicación
