@@ -1,5 +1,8 @@
 import io
 import os
+import openpyxl
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -35,13 +38,88 @@ COLUMNAS = [
 ]
 
 
-# Función para convertir el DataFrame a un archivo de Excel (.xlsx) en memoria
-def convertir_a_excel(df):
+# Función para generar y dar formato estético profesional al Excel
+def convertir_a_excel_formateado(df):
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Registros_Terreno")
-    processed_data = output.getvalue()
-    return processed_data
+
+    # Crear el archivo con openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Registros_Terreno"
+
+    # Estilos
+    header_fill = PatternFill(
+        start_color="1F4E78", end_color="1F4E78", fill_type="solid"
+    )  # Azul Corporativo
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+
+    row_fill_even = PatternFill(
+        start_color="F2F5F8", end_color="F2F5F8", fill_type="solid"
+    )  # Gris/Azul tenue para filas pares
+    row_fill_odd = PatternFill(
+        start_color="FFFFFF", end_color="FFFFFF", fill_type="solid"
+    )
+
+    thin_border = Border(
+        left=Side(style="thin", color="D9D9D9"),
+        right=Side(style="thin", color="D9D9D9"),
+        top=Side(style="thin", color="D9D9D9"),
+        bottom=Side(style="thin", color="D9D9D9"),
+    )
+
+    align_center = Alignment(horizontal="center", vertical="center")
+    align_left = Alignment(horizontal="left", vertical="center")
+
+    # Escribir encabezados
+    encabezados = list(df.columns)
+    ws.append(encabezados)
+
+    for col_num, col_name in enumerate(encabezados, 1):
+        cell = ws.cell(row=1, column=col_num)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = align_center
+        cell.border = thin_border
+
+    ws.row_dimensions[1].height = 28  # Altura del encabezado
+
+    # Escribir filas de datos con formato
+    for row_idx, row_data in enumerate(df.values, start=2):
+        ws.append(list(row_data))
+        fill_actual = row_fill_even if row_idx % 2 == 0 else row_fill_odd
+        ws.row_dimensions[row_idx].height = 20  # Altura de filas de datos
+
+        for col_idx, value in enumerate(row_data, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.fill = fill_actual
+            cell.border = thin_border
+            cell.font = Font(name="Calibri", size=10)
+
+            # Alineación según tipo de columna
+            col_name = encabezados[col_idx - 1]
+            if col_name in [
+                "Fecha_Registro",
+                "Orden_Trabajo",
+                "Codigo_Servicio",
+                "Estado_Trabajo",
+                "Puerta_Switch",
+            ]:
+                cell.alignment = align_center
+            else:
+                cell.alignment = align_left
+
+    # Auto-ajustar ancho de columnas
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            val_str = str(cell.value or "")
+            if len(val_str) > max_len:
+                max_len = len(val_str)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+    wb.save(output)
+    return output.getvalue()
 
 
 # Función para cargar datos
@@ -307,10 +385,10 @@ elif menu == "Panel de Control y Gráficos":
         st.subheader("📋 Consolidado de Trabajos (Tabla Interactiva)")
         st.dataframe(df, use_container_width=True)
 
-        # Generar descarga nativa a Excel (.xlsx)
-        excel_data = convertir_a_excel(df)
+        # Generar descarga nativa a Excel (.xlsx) con estilo profesional
+        excel_data = convertir_a_excel_formateado(df)
         st.download_button(
-            label="📊 Descargar Reporte en Excel (.xlsx)",
+            label="📊 Descargar Planilla Excel Formateada (.xlsx)",
             data=excel_data,
             file_name="reporte_trabajos_terreno.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
