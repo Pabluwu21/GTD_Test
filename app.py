@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -8,15 +9,20 @@ st.set_page_config(
 )
 
 # Definir la contraseña de Administrador
-CLAVE_ADMIN = "Pablito"  # Puedes cambiar esta clave por la que prefieras
+CLAVE_ADMIN = "admin123"
 
-# Columnas del sistema
+# Archivo de almacenamiento local para pruebas
+ARCHIVO_DATOS = "registros_terreno.csv"
+
+# Columnas del sistema actualizadas con los nuevos campos
 COLUMNAS = [
     "Fecha_Registro",
     "Tecnico",
     "Orden_Trabajo",
     "Codigo_Servicio",
     "Tipo_Trabajo",
+    "Subtipo_NRA",
+    "Tecnico_Apoyo",
     "Acceso_Switch",
     "Puerta_Switch",
     "IDS",
@@ -27,21 +33,31 @@ COLUMNAS = [
     "Estado_Equipamiento",
 ]
 
-# Inicialización de la base de datos en memoria
-if "df_datos" not in st.session_state:
-    st.session_state.df_datos = pd.DataFrame(columns=COLUMNAS)
 
-
+# Función para cargar datos (Soporta Session State y respaldo local)
 def cargar_datos():
+    if "df_datos" not in st.session_state:
+        if os.path.exists(ARCHIVO_DATOS):
+            st.session_state.df_datos = pd.read_csv(ARCHIVO_DATOS)
+        else:
+            st.session_state.df_datos = pd.DataFrame(columns=COLUMNAS)
     return st.session_state.df_datos
 
 
+# Función para guardar un nuevo registro
 def guardar_registro(nuevo_dict):
-    df_actual = st.session_state.df_datos
+    df_actual = cargar_datos()
     df_nuevo = pd.DataFrame([nuevo_dict])
-    st.session_state.df_datos = pd.concat(
-        [df_actual, df_nuevo], ignore_index=True
-    )
+    df_final = pd.concat([df_actual, df_nuevo], ignore_index=True)
+
+    # Actualizar estado de sesión
+    st.session_state.df_datos = df_final
+
+    # Guardar en archivo local para no perder datos si estás probando en PC
+    try:
+        df_final.to_csv(ARCHIVO_DATOS, index=False)
+    except Exception:
+        pass
 
 
 st.title("📡 Sistema de Control y Retroalimentación de Terreno")
@@ -52,7 +68,6 @@ st.markdown("Plataforma de gestión de trabajos, resguardo y causas de fallos.")
 # ---------------------------------------------------------
 st.sidebar.title("🔐 Control de Acceso")
 
-# Autenticación de Administrador
 es_admin = False
 clave_ingresada = st.sidebar.text_input(
     "Clave de Administrador", type="password", placeholder="Ingrese clave..."
@@ -66,7 +81,6 @@ elif clave_ingresada != "":
 
 st.sidebar.divider()
 
-# Definir opciones del menú según el rol
 if es_admin:
     opciones_menu = [
         "Registrar Trabajo",
@@ -82,7 +96,7 @@ else:
 menu = st.sidebar.radio("Navegación", opciones_menu)
 
 # ---------------------------------------------------------
-# PESTAÑA 1: REGISTRAR TRABAJO (Disponible para todos)
+# PESTAÑA 1: REGISTRAR TRABAJO
 # ---------------------------------------------------------
 if menu == "Registrar Trabajo":
     st.header("📝 Formulario de Trabajo en Terreno")
@@ -94,11 +108,11 @@ if menu == "Registrar Trabajo":
         orden = st.text_input("Orden de Trabajo (Ej: 1040548)")
         codigo_servicio = st.text_input("Código de Servicio (Ej: 010001)")
         tipo_trabajo = st.selectbox(
-            "Tipo de Trabajo",
+            "Tipo de Trabajo / Actividad",
             [
                 "Habilitación de servicio",
-                "Levantamiento en terreno",
                 "NRA",
+                "Levantamiento en terreno",
             ],
         )
 
@@ -114,9 +128,13 @@ if menu == "Registrar Trabajo":
             key="estado_trabajo_select",
         )
 
+    # Variables condicionales por defecto
+    subtipo_nra = "N/A"
+    tecnico_apoyo = "N/A"
     acceso_switch = "N/A"
     puerta_switch = "N/A"
 
+    # LÓGICA DE CAMPOS CONDICIONALES POR TIPO DE TRABAJO
     if tipo_trabajo == "Habilitación de servicio":
         st.info("🔌 Datos del Switch de Acceso (Requerido para Habilitaciones)")
         col_sw1, col_sw2 = st.columns(2)
@@ -129,6 +147,35 @@ if menu == "Registrar Trabajo":
             puerta_switch = st.text_input(
                 "Puerta (Puerto / Slot de salida)",
                 placeholder="Ej: Gi0/1/2",
+            )
+
+    elif tipo_trabajo == "NRA":
+        st.info("📋 Detalle de Actividad NRA")
+        subtipo_nra = st.selectbox(
+            "Subtipo de NRA",
+            [
+                "Cambio de equipo",
+                "Cambio de tecnología / Aumento de velocidad",
+                "Manos Remotas",
+                "Certificación",
+                "Habilitación NRA",
+                "Levantamiento NRA",
+            ],
+        )
+
+        # Sub-condicional 1: Cambio de tecnología / Aumento de velocidad -> Técnico de Apoyo
+        if subtipo_nra == "Cambio de tecnología / Aumento de velocidad":
+            st.warning("👥 Esta actividad requiere 2 personas.")
+            tecnico_apoyo = st.text_input(
+                "Nombre del Técnico de Apoyo",
+                placeholder="Ej: Juan Pérez",
+            )
+
+        # Sub-condicional 2: Habilitación NRA -> Switch de Acceso de Mall
+        elif subtipo_nra == "Habilitación NRA":
+            acceso_switch = st.text_input(
+                "Switch de Acceso de Mall",
+                placeholder="Ej: SW-MALL-01",
             )
 
     categoria_fallo = "N/A"
@@ -177,6 +224,8 @@ if menu == "Registrar Trabajo":
                 "Orden_Trabajo": orden,
                 "Codigo_Servicio": codigo_servicio,
                 "Tipo_Trabajo": tipo_trabajo,
+                "Subtipo_NRA": subtipo_nra,
+                "Tecnico_Apoyo": tecnico_apoyo,
                 "Acceso_Switch": acceso_switch,
                 "Puerta_Switch": puerta_switch,
                 "IDS": ids,
@@ -234,18 +283,14 @@ elif menu == "Panel de Control y Gráficos" and es_admin:
             st.plotly_chart(fig_pie_estado, use_container_width=True)
 
         with g_col2:
-            df_fallos = df[df["Estado_Trabajo"] == "No"]
-            if not df_fallos.empty:
-                st.markdown("**Distribución de Categorías de Fallos**")
-                fig_pie_fallos = px.pie(
-                    df_fallos,
-                    names="Categoria_Fallo",
-                    title="Causas de Trabajos No Realizados",
-                    hole=0.3,
-                )
-                st.plotly_chart(fig_pie_fallos, use_container_width=True)
-            else:
-                st.info("No hay trabajos fallidos registrados para mostrar causas.")
+            st.markdown("**Distribución por Tipo de Trabajo**")
+            fig_pie_tipos = px.pie(
+                df,
+                names="Tipo_Trabajo",
+                title="Tipos de Actividades Solicitadas",
+                hole=0.3,
+            )
+            st.plotly_chart(fig_pie_tipos, use_container_width=True)
 
         st.divider()
 
@@ -259,34 +304,6 @@ elif menu == "Panel de Control y Gráficos" and es_admin:
             file_name="reporte_trabajos_terreno.csv",
             mime="text/csv",
         )
-
-        st.divider()
-
-        st.subheader("🔎 Retroalimentación por IDS (Jefe de Implementación)")
-        ids_unicos = df["IDS"].dropna().unique()
-        if len(ids_unicos) > 0:
-            ids_seleccionado = st.selectbox(
-                "Seleccione un IDS para revisar fallos asociados:",
-                ids_unicos,
-            )
-
-            df_ids = df[df["IDS"] == ids_seleccionado]
-            fallos_ids = df_ids[df_ids["Estado_Trabajo"] == "No"]
-
-            st.write(
-                f"**Resumen para {ids_seleccionado}:** Total asignados: {len(df_ids)} | Trabajos con problema: {len(fallos_ids)}"
-            )
-
-            if not fallos_ids.empty:
-                for idx, row in fallos_ids.iterrows():
-                    st.markdown(
-                        f"- **Orden {row['Orden_Trabajo']}** (Técnico: {row['Tecnico']} | Operador: {row['Operador_Red']}): "
-                        f"*{row['Categoria_Fallo']}* — **Origen:** {row['Detalle_Fallo']}"
-                    )
-            else:
-                st.success(
-                    f"El IDS {ids_seleccionado} no presenta trabajos fallidos."
-                )
 
 # ---------------------------------------------------------
 # PESTAÑA 3: PERFIL DEL TÉCNICO (Sólo Admin)
@@ -352,17 +369,4 @@ elif menu == "Perfil del Técnico" and es_admin:
             st.divider()
 
             st.subheader("📋 Historial de Trabajos de este Técnico")
-            st.dataframe(
-                df_tec[
-                    [
-                        "Fecha_Registro",
-                        "Orden_Trabajo",
-                        "Tipo_Trabajo",
-                        "Estado_Trabajo",
-                        "Categoria_Fallo",
-                        "Detalle_Fallo",
-                        "Estado_Equipamiento",
-                    ]
-                ],
-                use_container_width=True,
-            )
+            st.dataframe(df_tec, use_container_width=True)
